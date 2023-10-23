@@ -13,18 +13,23 @@ class State:
     NUM_HIT_PROB_STATES = 6
     PROB_MAP = {i: Fraction(25+10*i, 100) for i in range(NUM_HIT_PROB_STATES)} # 25, 35, ..., 75 
     
-    def __init__(self, successes=(0,0,0), attempts=(0,0,0), hit_prob=NUM_HIT_PROB_STATES-1, length=10, target=(7,7,4),
-                 cut_score_func=None):
+    def __init__(self, successes=(0,0,0), attempts=(0,0,0), hit_prob=NUM_HIT_PROB_STATES-1, length=10, target=None,
+                 stone_scoring_func=None):
         """
-        sr: success rate
+        successes
         """
         self.successes = list(successes)
         self.attempts = list(attempts)
         self.hit_prob = hit_prob
 
         self.length = length
-        self.target = target
-            
+        
+        if stone_scoring_func is None:
+            assert target is not None 
+            stone_scoring_func = \
+                lambda successes: successes[0] >= target[0] and \
+                successes[1] >= target[1] and successes[2] <= target[2] 
+        self.stone_scoring_func = stone_scoring_func
 
     def set_state(self, sr: int, successes: Tuple[int], attempts: Tuple[int]):
         return
@@ -37,7 +42,7 @@ class State:
         attempts[index] += 1
         hit_prob = max(self.hit_prob-1, 0)
 
-        return State(successes, attempts, hit_prob, length=self.length, target=self.target)
+        return State(successes, attempts, hit_prob, length=self.length, stone_scoring_func=self.stone_scoring_func)
 
     def record_failure_on(self, index):
         successes = deepcopy(self.successes)
@@ -47,7 +52,7 @@ class State:
         attempts[index] += 1
         hit_prob = min(self.hit_prob+1, State.NUM_HIT_PROB_STATES-1)
 
-        return State(successes, attempts, hit_prob, length=self.length, target=self.target)
+        return State(successes, attempts, hit_prob, length=self.length, stone_scoring_func=self.stone_scoring_func)
 
     def get_state(self):
         return self.successes, self.attempts, self.hit_prob
@@ -57,7 +62,6 @@ class State:
 
     def is_terminal(self):
         attempts = self.attempts
-        target = self.target
         
         # Possible to short circuit before 10/10/10 attempts, but not implemented
         return all(attempt == self.length for attempt in attempts) # or \
@@ -66,11 +70,9 @@ class State:
     def terminal_state_value(self):
         attempts = self.attempts
         successes = self.successes
-        target = self.target
 
         # 1 if meets target, 0 otherwise
-        return int(sum(attempts) == 3*self.length and \
-            successes[0] >= target[0] and successes[1] >= target[1] and successes[2] <= target[2]) 
+        return int(sum(attempts) == 3*self.length and self.stone_scoring_func(successes)) 
             
     def __eq__(self, other):
         if isinstance(other, State):
@@ -86,13 +88,18 @@ class State:
         return f'{successes} {attempts} {hit_prob}'
 
 
-def calculate(length=10, target=(9,7,4), cut_score_func=None):
-    state = State(length=length, target=target)
+def calculate(length=10, target=None, stone_scoring_func=None):
+    assert target is not None or stone_scoring_func is not None 
+    if target is not None:
+        state = State(length=length, target=target)
+    else:
+        state = State(length=length, stone_scoring_func=stone_scoring_func)
+    
     return calculate_(state)
 
 def calculate_(state):
-    if state in statehash:
-        return statehash[state]
+    if state.__hash__() in statehash:
+        return statehash[state.__hash__()]
     if state.is_terminal():
         # make sure not to stop early even if not at 10 attempts. 
         # can leave like this if can calculate number of remaining combinations
@@ -121,7 +128,7 @@ def calculate_(state):
 
     if len(statehash) % 10000 == 0:
         print(state, len(statehash))
-    statehash[state] = (optimal, optimal_move)
+    statehash[state.__hash__()] = (optimal, optimal_move)
     return optimal, optimal_move
 
 
@@ -137,11 +144,19 @@ if __name__ == '__main__':
     # print(s2 in statehash)
     # print(hash(s1), hash(s2))
 
-    # 9-7 either way
-    def cut_score_func(attempts):
-        return int(max(attempts[:2]) >= 9 and min(attempts[:2]) >= 7 and attempts[2] <= 4)
+    def stone_scoring_func_97either(successes: Tuple[int]):
+        """
+        9-7 either way
+        """
+        return max(successes[:2]) >= 9 and min(successes[:2]) >= 7 and successes[2] <= 4
 
-    optimal, optimal_move = calculate()
+    def stone_scoring_func_77(successes: Tuple[int]):
+        """
+        7-7
+        """
+        return successes[0] >= 7 and successes[1] >= 7 and successes[2] <= 4
+
+    optimal, optimal_move = calculate(length=10, stone_scoring_func=stone_scoring_func_97either)
     print(optimal, optimal_move)
     print(len(statehash))
 
@@ -150,7 +165,8 @@ if __name__ == '__main__':
     with open('statehash.pkl', 'wb') as f:
         pickle.dump(statehash, f)
 
-    # 774: 5169511470844657481170536432757040091/107374182400000000000000000000000000000
-    # 974: 15193612562836429137779045907427203/21474836480000000000000000000000000000
+    # 774: 5169511470844657481170536432757040091/107374182400000000000000000000000000000 (0.04814482732)
+    # 974: 15193612562836429137779045907427203/21474836480000000000000000000000000000 (0.00070750771)
+    # 974 either way: 127303313351678582209888888318703619/107374182400000000000000000000000000000 (0.00118560449)
 
 

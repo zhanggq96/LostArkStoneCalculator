@@ -156,15 +156,21 @@ if __name__ == '__main__':
         """
         return successes[0] >= 7 and successes[1] >= 7 and successes[2] <= 4
 
-    optimal, optimal_move = calculate(length=10, stone_scoring_func=stone_scoring_func_97either)
+    def stone_scoring_func_97or610(successes: Tuple[int]):
+        """
+        Either 9-7 or 6-10 to get +2 on the second engraving
+        """
+        return ((successes[0] >= 9 and successes[1] >= 7) or (successes[0] >= 6 and successes[1] >= 10)) \
+            and successes[2] <= 4
+
+    optimal, optimal_move = calculate(length=10, stone_scoring_func=stone_scoring_func_97or610)
     print(optimal, optimal_move)
     print(len(statehash))
-
-    # Denominator: 107374182400000000000000000000000000000
 
     with open('statehash.pkl', 'wb') as f:
         pickle.dump(statehash, f)
 
+    # Probabilities of achieving stone cut
     # 774: 5169511470844657481170536432757040091/107374182400000000000000000000000000000 (0.04814482732)
     # 974: 15193612562836429137779045907427203/21474836480000000000000000000000000000 (0.00070750771)
     # 974 either way: 127303313351678582209888888318703619/107374182400000000000000000000000000000 (0.00118560449)
